@@ -1,0 +1,27 @@
+# tagpr: opens/updates a release PR from main; merging it tags main and publishes a GitHub Release.
+# Repository Settings → Actions → General: enable "Allow GitHub Actions to create and approve pull requests".
+name: tagpr
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  tagpr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    timeout-minutes: 60
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run tagpr
+        uses: Songmu/tagpr@b3fb89424646b06c8aa460f50307c60b6a541425 # v1.17.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
