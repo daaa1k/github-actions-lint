@@ -1,0 +1,32 @@
+name: GitHub Actions Lint
+description: Run actionlint, ghalint, and zizmor via mise. Callers do not need a mise.toml; tools are pinned in this action repository.
+branding:
+  icon: check-square
+  color: green
+
+inputs:
+  working-directory:
+    description: Path relative to the repository root where linters run (e.g. packages/app). Use "." for the repository root.
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+      with:
+        working_directory: ${{ github.action_path }}
+        cache: true
+    - name: Run linters
+      shell: bash
+      env:
+        working_directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        case "${working_directory}" in
+          *..*) echo "working-directory must not contain .." >&2; exit 1 ;;
+        esac
+        mise trust "${{ github.action_path }}/mise.toml"
+        cd "${{ github.action_path }}"
+        target="${GITHUB_WORKSPACE}/${working_directory}"
+        mise exec -C "$target" -- bash "${{ github.action_path }}/scripts/run-github-actions-lint.sh"
