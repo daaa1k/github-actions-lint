@@ -9,14 +9,25 @@ When you use a composite action with `uses: owner/repo@ref`, GitHub extracts tha
 ## Usage
 
 ```yaml
+name: GitHub Actions Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
-      - uses: YOUR_ORG/github-actions-lint@v1 # or @main / a commit SHA
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: daaa1k/github-actions-lint@da8a31ebd224d959b6a96b0bc389b948acb4648c # v1.0.0
 ```
 
 Pinning to a **tag** (for example `v1`) or a **full commit SHA** is recommended for supply-chain stability.
