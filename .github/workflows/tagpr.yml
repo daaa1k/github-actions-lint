@@ -1,5 +1,10 @@
 # tagpr: opens/updates a release PR from main; merging it tags main and publishes a GitHub Release.
-# After a full semver tag (e.g. v1.0.0), action-update-semver also moves the major tag (e.g. v1).
+# After a full semver tag (e.g. v1.0.0), .github/scripts/update-major-signed-tag.sh force-updates the major tag (e.g. v1) with GPG so it shows Verified.
+# Secrets (prefer this job's GitHub Environment over repo-wide secrets; see zizmor secrets-outside-env):
+#   GPG_PRIVATE_KEY (armored secret key), optional GPG_PASSPHRASE. Register the matching public key on GitHub (verified email).
+#   TAGPR_PAT: set GH_TOKEN and GITHUB_TOKEN to the same classic PAT (repo) or fine-grained token. go-gh reads GH_TOKEN first.
+#   If tagpr hits 403 on POST .../merges with "Must have admin rights", stale tagpr-temp / tagpr-from-* branches often leave tagpr in cherry-pick mode; the pre-step below deletes those refs so tagpr can recreate cleanly.
+# Create environment "gpg-signing" under Settings → Environments and add those secrets there (remove repo copies if you migrate).
 # Repository Settings → Actions → General: enable "Allow GitHub Actions to create and approve pull requests".
 name: tagpr
 
@@ -11,6 +16,7 @@ on:
 jobs:
   tagpr:
     runs-on: ubuntu-latest
+    environment: gpg-signing
     permissions:
       contents: write
       pull-requests: write
@@ -22,15 +28,32 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Remove stale tagpr remote branches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TAGPR_PAT }}
+        run: |
+          set -euo pipefail
+          # Leftover tagpr-temp / tagpr-from-* refs make tagpr enter cherry-pick mode (Songmu/tagpr uses POST .../merges), which can 403 even for repo owners. Deleting lets tagpr open a fresh release PR.
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/tagpr-temp" 2>/dev/null || true
+          for b in $(gh api "repos/${{ github.repository }}/branches" --paginate -q '.[].name' | grep -E '^tagpr-from-' || true); do
+            [ -z "$b" ] && continue
+            gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/${b}" 2>/dev/null || true
+          done
+
       - id: tagpr
         name: Run tagpr
         uses: Songmu/tagpr@b3fb89424646b06c8aa460f50307c60b6a541425 # v1.17.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # go-gh auth prefers GH_TOKEN over GITHUB_TOKEN; both must be the PAT or tagpr can pick up a stale GH_TOKEN and call the API as the wrong principal.
+          GH_TOKEN: ${{ secrets.TAGPR_PAT }}
+          GITHUB_TOKEN: ${{ secrets.TAGPR_PAT }}
 
-      - name: Update major semver tag
+      - name: Update major semver tag (GPG-signed)
         if: steps.tagpr.outputs.tag != ''
-        uses: haya14busa/action-update-semver@7d2c558640ea49e798d46539536190aff8c18715 # v1.5.1
-        with:
-          tag: ${{ steps.tagpr.outputs.tag }}
-          major_version_tag_only: true
+        env:
+          TAG: ${{ steps.tagpr.outputs.tag }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/update-major-signed-tag.sh
